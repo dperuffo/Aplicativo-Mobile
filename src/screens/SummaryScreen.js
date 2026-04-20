@@ -11,7 +11,9 @@ import { api } from '../api';
 
 export default function SummaryScreen({ route, navigation }) {
   const { placa, posto, cnpjPosto, cidadePosto, ufPosto, bandeiraPosto,
-          combustivel, hodometro, volume, precoUnitario, valorTotal } = route.params;
+          combustivel, hodometro, volume, precoUnitario,
+          arla32Volume = 0, arla32Preco = 0, arla32Total = 0,
+          valorTotal } = route.params;
   const [loading, setLoading] = useState(false);
 
   async function handleProceed() {
@@ -27,6 +29,9 @@ export default function SummaryScreen({ route, navigation }) {
         hodometro,
         volume,
         precoUnitario,
+        arla32Volume,
+        arla32Preco,
+        arla32Total,
         valorTotal,
       });
       navigation.replace('AuthCode', {
@@ -57,6 +62,9 @@ export default function SummaryScreen({ route, navigation }) {
     { label: 'Hodômetro',          value: `${formatNumero(hodometro, 0)} km`,             icon: '🔢' },
     { label: 'Volume',             value: `${formatNumero(volume, 2)} L`,                 icon: '🧪' },
     { label: 'Preço por litro',    value: formatMoeda(precoUnitario),                     icon: '💲' },
+    ...(arla32Total > 0 ? [
+      { label: 'Arla 32',          value: `${formatNumero(arla32Volume, 2)} L × ${formatMoeda(arla32Preco)}/L = ${formatMoeda(arla32Total)}`, icon: '🔵' },
+    ] : []),
   ];
 
   return (
@@ -98,6 +106,7 @@ export default function SummaryScreen({ route, navigation }) {
           <Text style={styles.totalValue}>{formatMoeda(valorTotal)}</Text>
           <Text style={styles.totalNote}>
             {formatNumero(volume, 2)} L × {formatMoeda(precoUnitario)}/L
+            {arla32Total > 0 ? `  +  Arla ${formatMoeda(arla32Total)}` : ''}
           </Text>
         </LinearGradient>
 

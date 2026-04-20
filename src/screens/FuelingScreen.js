@@ -54,6 +54,13 @@ export default function FuelingScreen({ navigation }) {
   const [volume, setVolume]           = useState('');
   const [precoUnit, setPrecoUnit]     = useState('');
 
+  // Arla 32 (opcional, somente Diesel)
+  const [arlaAtivo, setArlaAtivo]     = useState(false);
+  const [arlaVolume, setArlaVolume]   = useState('');
+  const [arlaPreco, setArlaPreco]     = useState('');
+
+  const isDiesel = combustivel === 'Diesel Comum' || combustivel === 'Diesel S10';
+
   // Pesquisa postos
   const [busca, setBusca]           = useState('');
   const [buscaCnpj, setBuscaCnpj]   = useState('');
@@ -103,18 +110,24 @@ export default function FuelingScreen({ navigation }) {
   function limparBusca() { setBusca(''); setBuscaCnpj(''); setBuscaCidade(''); setBuscaUF(''); }
 
   function buildPayload(targetStep) {
-    const v = parseFloat(volume.replace(',', '.')) || 0;
-    const p = parseFloat(precoUnit.replace(',', '.')) || 0;
+    const v  = parseFloat(volume.replace(',', '.')) || 0;
+    const p  = parseFloat(precoUnit.replace(',', '.')) || 0;
+    const av = arlaAtivo ? (parseFloat(arlaVolume.replace(',', '.')) || 0) : 0;
+    const ap = arlaAtivo ? (parseFloat(arlaPreco.replace(',', '.'))  || 0) : 0;
+    const arlaTotal = parseFloat((av * ap).toFixed(2));
     return {
-      etapa:        ETAPAS[targetStep] || '',
-      placa:        placa.trim().toUpperCase(),
-      posto:        posto?.razao || '',
-      cnpjPosto:    posto?.cnpj  || '',
+      etapa:         ETAPAS[targetStep] || '',
+      placa:         placa.trim().toUpperCase(),
+      posto:         posto?.razao || '',
+      cnpjPosto:     posto?.cnpj  || '',
       combustivel,
-      hodometro:    parseFloat(hodometro.replace(',', '.')) || 0,
-      volume:       v,
+      hodometro:     parseFloat(hodometro.replace(',', '.')) || 0,
+      volume:        v,
       precoUnitario: p,
-      valorTotal:   parseFloat((v * p).toFixed(2)),
+      arla32Volume:  av,
+      arla32Preco:   ap,
+      arla32Total:   arlaTotal,
+      valorTotal:    parseFloat((v * p + arlaTotal).toFixed(2)),
     };
   }
 
@@ -131,6 +144,12 @@ export default function FuelingScreen({ navigation }) {
       const p = parseFloat(precoUnit.replace(',', '.'));
       if (!volume || isNaN(v) || v <= 0)    return 'Informe a quantidade em litros.';
       if (!precoUnit || isNaN(p) || p <= 0) return 'Informe o preço por litro.';
+      if (arlaAtivo) {
+        const av = parseFloat(arlaVolume.replace(',', '.'));
+        const ap = parseFloat(arlaPreco.replace(',', '.'));
+        if (!arlaVolume || isNaN(av) || av <= 0) return 'Informe a quantidade de Arla 32 em litros.';
+        if (!arlaPreco  || isNaN(ap) || ap <= 0) return 'Informe o preço por litro do Arla 32.';
+      }
     }
     return null;
   }
@@ -142,8 +161,11 @@ export default function FuelingScreen({ navigation }) {
 
     if (step === STEPS.length - 1) {
       // Último passo → ir para resumo
-      const v = parseFloat(volume.replace(',', '.'));
-      const p = parseFloat(precoUnit.replace(',', '.'));
+      const v  = parseFloat(volume.replace(',', '.'));
+      const p  = parseFloat(precoUnit.replace(',', '.'));
+      const av = arlaAtivo ? (parseFloat(arlaVolume.replace(',', '.')) || 0) : 0;
+      const ap = arlaAtivo ? (parseFloat(arlaPreco.replace(',', '.'))  || 0) : 0;
+      const arlaTotal = parseFloat((av * ap).toFixed(2));
       navigation.navigate('Summary', {
         placa:         placa.trim().toUpperCase(),
         posto:         posto?.razao    || '',
@@ -155,7 +177,10 @@ export default function FuelingScreen({ navigation }) {
         hodometro:     parseFloat(hodometro.replace(',', '.')),
         volume:        v,
         precoUnitario: p,
-        valorTotal:    parseFloat((v * p).toFixed(2)),
+        arla32Volume:  av,
+        arla32Preco:   ap,
+        arla32Total:   arlaTotal,
+        valorTotal:    parseFloat((v * p + arlaTotal).toFixed(2)),
       });
       return;
     }
@@ -385,14 +410,68 @@ export default function FuelingScreen({ navigation }) {
               <TextInput style={styles.inputLarge} value={precoUnit}
                 onChangeText={v => { setPrecoUnit(v.replace(/[^0-9,.]/g, '')); setError(''); }}
                 placeholder="Ex: 5,79" placeholderTextColor={COLORS.textMuted} keyboardType="numeric" />
-              {volume && precoUnit && parseFloat(volume.replace(',','.')) > 0 && parseFloat(precoUnit.replace(',','.')) > 0 && (
-                <View style={styles.previewBox}>
-                  <Text style={styles.previewLabel}>Valor estimado</Text>
-                  <Text style={styles.previewValue}>
-                    R$ {(parseFloat(volume.replace(',','.')) * parseFloat(precoUnit.replace(',','.'))).toFixed(2).replace('.',',')}
-                  </Text>
+
+              {/* ── Arla 32 (somente Diesel) ── */}
+              {isDiesel && (
+                <View style={styles.arlaWrap}>
+                  <TouchableOpacity style={styles.arlaToggle} onPress={() => { setArlaAtivo(a => !a); setArlaVolume(''); setArlaPreco(''); }} activeOpacity={0.8}>
+                    <View style={[styles.arlaCheckbox, arlaAtivo && styles.arlaCheckboxOn]}>
+                      {arlaAtivo && <Text style={styles.arlaCheckMark}>✓</Text>}
+                    </View>
+                    <View>
+                      <Text style={styles.arlaToggleLabel}>Adicionar Arla 32</Text>
+                      <Text style={styles.arlaToggleSub}>Aditivo obrigatório para motores SCR</Text>
+                    </View>
+                  </TouchableOpacity>
+
+                  {arlaAtivo && (
+                    <View style={styles.arlaFields}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.label}>Litros de Arla 32</Text>
+                        <TextInput style={styles.inputLarge} value={arlaVolume}
+                          onChangeText={v => { setArlaVolume(v.replace(/[^0-9,.]/g, '')); setError(''); }}
+                          placeholder="Ex: 5" placeholderTextColor={COLORS.textMuted} keyboardType="numeric" />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.label}>Preço / litro (R$)</Text>
+                        <TextInput style={styles.inputLarge} value={arlaPreco}
+                          onChangeText={v => { setArlaPreco(v.replace(/[^0-9,.]/g, '')); setError(''); }}
+                          placeholder="Ex: 4,50" placeholderTextColor={COLORS.textMuted} keyboardType="numeric" />
+                      </View>
+                    </View>
+                  )}
                 </View>
               )}
+
+              {/* Preview total */}
+              {(() => {
+                const v  = parseFloat(volume.replace(',','.'))   || 0;
+                const p  = parseFloat(precoUnit.replace(',','.')) || 0;
+                const av = arlaAtivo ? (parseFloat(arlaVolume.replace(',','.')) || 0) : 0;
+                const ap = arlaAtivo ? (parseFloat(arlaPreco.replace(',','.'))  || 0) : 0;
+                const combTotal = v * p;
+                const arlaTotal = av * ap;
+                const total = combTotal + arlaTotal;
+                if (total <= 0) return null;
+                return (
+                  <View style={styles.previewBox}>
+                    {combTotal > 0 && (
+                      <Text style={styles.previewLine}>
+                        {combustivel}: {v.toFixed(2)} L × R$ {p.toFixed(2)} = R$ {combTotal.toFixed(2).replace('.',',')}
+                      </Text>
+                    )}
+                    {arlaTotal > 0 && (
+                      <Text style={styles.previewLine}>
+                        Arla 32: {av.toFixed(2)} L × R$ {ap.toFixed(2)} = R$ {arlaTotal.toFixed(2).replace('.',',')}
+                      </Text>
+                    )}
+                    <Text style={styles.previewLabel}>VALOR TOTAL ESTIMADO</Text>
+                    <Text style={styles.previewValue}>
+                      R$ {total.toFixed(2).replace('.',',')}
+                    </Text>
+                  </View>
+                );
+              })()}
             </View>
           )}
 
@@ -585,8 +664,18 @@ const styles = StyleSheet.create({
   combLabelSel:{ color: COLORS.primary },
 
   previewBox:   { backgroundColor: '#F0FDF4', borderRadius: 12, padding: 16, marginTop: 16, alignItems: 'center', borderWidth: 1, borderColor: '#BBF7D0' },
-  previewLabel: { fontSize: 12, color: '#166534', fontWeight: '600', marginBottom: 4 },
+  previewLine:  { fontSize: 12, color: '#166534', marginBottom: 4 },
+  previewLabel: { fontSize: 12, color: '#166534', fontWeight: '700', marginBottom: 4, marginTop: 8, textTransform: 'uppercase', letterSpacing: 0.5 },
   previewValue: { fontSize: 28, fontWeight: '800', color: '#16A34A' },
+
+  arlaWrap:          { marginTop: 20, borderTopWidth: 1, borderTopColor: COLORS.border, paddingTop: 16 },
+  arlaToggle:        { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 4 },
+  arlaCheckbox:      { width: 24, height: 24, borderRadius: 6, borderWidth: 2, borderColor: COLORS.border, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.bg },
+  arlaCheckboxOn:    { borderColor: '#0F2D6B', backgroundColor: '#0F2D6B' },
+  arlaCheckMark:     { color: '#fff', fontSize: 13, fontWeight: '700' },
+  arlaToggleLabel:   { fontSize: 15, fontWeight: '700', color: COLORS.textPrimary },
+  arlaToggleSub:     { fontSize: 12, color: COLORS.textMuted, marginTop: 1 },
+  arlaFields:        { flexDirection: 'row', gap: 12, marginTop: 14 },
 
   errorBox:  { backgroundColor: '#FEF2F2', borderRadius: 10, padding: 12, marginBottom: 12 },
   errorText: { color: COLORS.danger, fontSize: 14, fontWeight: '500' },
