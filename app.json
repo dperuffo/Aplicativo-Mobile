@@ -19,7 +19,12 @@
       "package": "com.profrotas.appmorista",
       "versionCode": 1
     },
-    "platforms": ["android"],
-    "scheme": "appmotor"
+    "platforms": [
+      "android"
+    ],
+    "scheme": "appmotor",
+    "plugins": [
+      "expo-asset"
+    ]
   }
 }
