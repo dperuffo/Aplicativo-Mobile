@@ -10,7 +10,8 @@ import { formatMoeda, formatNumero } from '../utils/formatters';
 import { api } from '../api';
 
 export default function SummaryScreen({ route, navigation }) {
-  const { placa, combustivel, hodometro, volume, precoUnitario, valorTotal } = route.params;
+  const { placa, posto, cnpjPosto, cidadePosto, ufPosto, bandeiraPosto,
+          combustivel, hodometro, volume, precoUnitario, valorTotal } = route.params;
   const [loading, setLoading] = useState(false);
 
   async function handleProceed() {
@@ -18,6 +19,10 @@ export default function SummaryScreen({ route, navigation }) {
     try {
       const res = await api.solicitarAbastecimento({
         placa,
+        posto,
+        cnpjPosto,
+        cidadePosto,
+        ufPosto,
         combustivel,
         hodometro,
         volume,
@@ -46,11 +51,12 @@ export default function SummaryScreen({ route, navigation }) {
   }
 
   const rows = [
-    { label: 'Veículo (Placa)',    value: placa,                      icon: '🚗' },
-    { label: 'Combustível',        value: combustivel,                 icon: '⛽' },
-    { label: 'Hodômetro',          value: `${formatNumero(hodometro, 0)} km`, icon: '🔢' },
-    { label: 'Volume',             value: `${formatNumero(volume, 2)} L`,   icon: '🧪' },
-    { label: 'Preço por litro',    value: formatMoeda(precoUnitario),  icon: '💲' },
+    { label: 'Veículo (Placa)',    value: placa,                                          icon: '🚗' },
+    { label: 'Posto',              value: posto + (cidadePosto ? ` · ${cidadePosto}/${ufPosto}` : ''), icon: '🏪' },
+    { label: 'Combustível',        value: combustivel,                                    icon: '⛽' },
+    { label: 'Hodômetro',          value: `${formatNumero(hodometro, 0)} km`,             icon: '🔢' },
+    { label: 'Volume',             value: `${formatNumero(volume, 2)} L`,                 icon: '🧪' },
+    { label: 'Preço por litro',    value: formatMoeda(precoUnitario),                     icon: '💲' },
   ];
 
   return (
