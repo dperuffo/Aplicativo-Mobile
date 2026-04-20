@@ -65,6 +65,10 @@ export const api = {
   getToken: (codigo) =>
     request('GET', `/api/mobile/token/${codigo}`),
 
+  // Validação por etapa
+  validarPasso: (dados) =>
+    request('POST', '/api/mobile/validar-passo', dados),
+
   // Abastecimento
   solicitarAbastecimento: (dados) =>
     request('POST', '/api/mobile/abastecimento/solicitar', dados),
