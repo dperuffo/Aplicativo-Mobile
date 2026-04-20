@@ -1,0 +1,25 @@
+{
+  "expo": {
+    "name": "App Motorista FX",
+    "slug": "app-motorista-fx",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0F2D6B"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0F2D6B"
+      },
+      "package": "com.profrotas.appmorista",
+      "versionCode": 1
+    },
+    "platforms": ["android"],
+    "scheme": "appmotor"
+  }
+}
