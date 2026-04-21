@@ -54,12 +54,16 @@ export default function FuelingScreen({ navigation }) {
   const [volume, setVolume]           = useState('');
   const [precoUnit, setPrecoUnit]     = useState('');
 
+  // Preço sugerido pelo backend (posto + combustível)
+  const [precoSugerido, setPrecoSugerido] = useState(null);
+  const [loadingPreco, setLoadingPreco]   = useState(false);
+
   // Arla 32 (opcional, somente Diesel)
   const [arlaAtivo, setArlaAtivo]     = useState(false);
   const [arlaVolume, setArlaVolume]   = useState('');
   const [arlaPreco, setArlaPreco]     = useState('');
 
-  const isDiesel = combustivel === 'Diesel Comum' || combustivel === 'Diesel S10';
+  const isDiesel = combustivel === 'Diesel Comum' || combustivel === 'Diesel Aditivado';
 
   // Pesquisa postos
   const [busca, setBusca]           = useState('');
@@ -138,6 +142,8 @@ export default function FuelingScreen({ navigation }) {
     if (step === 3) {
       const h = parseFloat(hodometro.replace(',', '.'));
       if (!hodometro || isNaN(h) || h <= 0) return 'Informe o hodômetro atual em km.';
+      if (veiculoSel?.hodometro > 0 && h <= veiculoSel.hodometro)
+        return `O hodômetro deve ser maior que o último registrado (${formatNumero(veiculoSel.hodometro, 0)} km).`;
     }
     if (step === 4) {
       const v = parseFloat(volume.replace(',', '.'));
@@ -192,6 +198,13 @@ export default function FuelingScreen({ navigation }) {
       const lista = res.avisos || [];
       const temAvisoReal = lista.some(a => a.tipo === 'error' || a.tipo === 'warning');
 
+      // Aproveita preco_sugerido retornado pelo validarPasso (passo combustível)
+      if (step === 2 && res.preco_sugerido) {
+        const precoFormatado = String(res.preco_sugerido).replace('.', ',');
+        setPrecoSugerido(precoFormatado);
+        setPrecoUnit(precoFormatado);
+      }
+
       if (lista.length > 0 && temAvisoReal) {
         setAvisos(lista);
         setAvisosBloqueado(res.bloqueado);
@@ -199,6 +212,20 @@ export default function FuelingScreen({ navigation }) {
         setModalAvisos(true);
       } else {
         setStep(s => s + 1);
+        // Busca preço sugerido em background ao avançar do passo combustível
+        if (step === 2 && posto?.cnpj && !res.preco_sugerido) {
+          setLoadingPreco(true);
+          api.getPreco(posto.cnpj, combustivel)
+            .then(r => {
+              if (r.preco) {
+                const precoFormatado = String(r.preco).replace('.', ',');
+                setPrecoSugerido(precoFormatado);
+                setPrecoUnit(precoFormatado);
+              }
+            })
+            .catch(() => {})
+            .finally(() => setLoadingPreco(false));
+        }
       }
     } catch (e) {
       // Se validação falhar, deixa prosseguir (não bloqueia por erro de rede)
@@ -347,7 +374,7 @@ export default function FuelingScreen({ navigation }) {
                           <View style={styles.postoLista}>
                             <Text style={styles.postoListaHeader}>{postosFiltrados.length} posto{postosFiltrados.length !== 1 ? 's' : ''} encontrado{postosFiltrados.length !== 1 ? 's' : ''}</Text>
                             {postosFiltrados.map((p, i) => (
-                              <TouchableOpacity key={p.id || i} style={styles.postoItem} onPress={() => { setPosto(p); setError(''); }} activeOpacity={0.75}>
+                              <TouchableOpacity key={p.id || i} style={styles.postoItem} onPress={() => { setPosto(p); setPrecoUnit(''); setPrecoSugerido(null); setError(''); }} activeOpacity={0.75}>
                                 <View style={styles.postoItemIcon}><Text style={styles.postoItemIconText}>⛽</Text></View>
                                 <View style={{ flex: 1 }}>
                                   <Text style={styles.postoItemNome}>{p.razao}</Text>
@@ -373,7 +400,7 @@ export default function FuelingScreen({ navigation }) {
               <View style={styles.combGrid}>
                 {COMBUSTIVEIS.map(c => (
                   <TouchableOpacity key={c} style={[styles.combItem, combustivel === c && styles.combItemSel]}
-                    onPress={() => { setCombustivel(c); setError(''); }}>
+                    onPress={() => { setCombustivel(c); setPrecoUnit(''); setPrecoSugerido(null); setError(''); }}>
                     <Text style={styles.combEmoji}>{getCombEmoji(c)}</Text>
                     <Text style={[styles.combLabel, combustivel === c && styles.combLabelSel]}>{c}</Text>
                   </TouchableOpacity>
@@ -386,14 +413,31 @@ export default function FuelingScreen({ navigation }) {
           {step === 3 && (
             <View style={styles.stepCard}>
               <Text style={styles.stepTitle}>🔢 Hodômetro atual</Text>
-              <Text style={styles.stepDesc}>Informe a leitura atual do hodômetro. Deve ser maior que o último abastecimento.</Text>
-              <Text style={styles.label}>Hodômetro (km)</Text>
-              <TextInput style={styles.inputLarge} value={hodometro}
+              <Text style={styles.stepDesc}>Informe a leitura atual do hodômetro do veículo.</Text>
+
+              {veiculoSel?.hodometro > 0 ? (
+                <View style={styles.hodoInfoCard}>
+                  <View style={styles.hodoInfoRow}>
+                    <Text style={styles.hodoInfoIcon}>📍</Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.hodoInfoLabel}>Último abastecimento registrado</Text>
+                      <Text style={styles.hodoInfoValue}>{formatNumero(veiculoSel.hodometro, 0)} km</Text>
+                      <Text style={styles.hodoInfoSub}>O novo hodômetro deve ser maior que este valor.</Text>
+                    </View>
+                  </View>
+                </View>
+              ) : null}
+
+              <Text style={styles.label}>Hodômetro atual (km)</Text>
+              <TextInput
+                style={styles.inputLarge}
+                value={hodometro}
                 onChangeText={v => { setHodometro(v.replace(/[^0-9,.]/g, '')); setError(''); }}
-                placeholder="Ex: 45000" placeholderTextColor={COLORS.textMuted} keyboardType="numeric" autoFocus />
-              {veiculoSel?.hodometro > 0 && (
-                <Text style={styles.hodoHint}>ℹ Último registrado: {formatNumero(veiculoSel.hodometro, 0)} km</Text>
-              )}
+                placeholder={veiculoSel?.hodometro > 0 ? `Acima de ${formatNumero(veiculoSel.hodometro, 0)}` : 'Ex: 45000'}
+                placeholderTextColor={COLORS.textMuted}
+                keyboardType="numeric"
+                autoFocus
+              />
             </View>
           )}
 
@@ -406,10 +450,23 @@ export default function FuelingScreen({ navigation }) {
               <TextInput style={styles.inputLarge} value={volume}
                 onChangeText={v => { setVolume(v.replace(/[^0-9,.]/g, '')); setError(''); }}
                 placeholder="Ex: 50" placeholderTextColor={COLORS.textMuted} keyboardType="numeric" autoFocus />
-              <Text style={[styles.label, { marginTop: 16 }]}>Preço por litro (R$)</Text>
-              <TextInput style={styles.inputLarge} value={precoUnit}
+              <View style={styles.precoLabelRow}>
+                <Text style={[styles.label, { marginTop: 16, marginBottom: 0 }]}>Preço por litro (R$)</Text>
+                {loadingPreco && <ActivityIndicator size="small" color={COLORS.primary} style={{ marginTop: 14 }} />}
+                {!loadingPreco && precoSugerido && precoUnit === precoSugerido && (
+                  <View style={styles.precoSugeridoBadge}>
+                    <Text style={styles.precoSugeridoText}>⚡ Sugerido pelo posto</Text>
+                  </View>
+                )}
+              </View>
+              <TextInput
+                style={[styles.inputLarge, precoSugerido && precoUnit === precoSugerido && styles.inputSugerido]}
+                value={precoUnit}
                 onChangeText={v => { setPrecoUnit(v.replace(/[^0-9,.]/g, '')); setError(''); }}
-                placeholder="Ex: 5,79" placeholderTextColor={COLORS.textMuted} keyboardType="numeric" />
+                placeholder={loadingPreco ? 'Buscando preço...' : 'Ex: 5,79'}
+                placeholderTextColor={COLORS.textMuted}
+                keyboardType="numeric"
+              />
 
               {/* ── Arla 32 (somente Diesel) ── */}
               {isDiesel && (
@@ -622,7 +679,17 @@ const styles = StyleSheet.create({
   label:     { fontSize: 13, fontWeight: '600', color: COLORS.textSecondary, marginBottom: 6 },
   input:     { borderWidth: 1.5, borderColor: COLORS.border, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 13, fontSize: 16, color: COLORS.textPrimary, backgroundColor: COLORS.bg },
   inputLarge:{ borderWidth: 1.5, borderColor: COLORS.border, borderRadius: 12, paddingHorizontal: 20, paddingVertical: 16, fontSize: 28, color: COLORS.textPrimary, backgroundColor: COLORS.bg, textAlign: 'center', fontWeight: '700' },
-  hodoHint:  { fontSize: 13, color: COLORS.textMuted, marginTop: 8, textAlign: 'center' },
+  precoLabelRow:       { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 16, marginBottom: 6, gap: 8 },
+  precoSugeridoBadge:  { backgroundColor: '#ECFDF5', borderRadius: 20, paddingHorizontal: 10, paddingVertical: 3, borderWidth: 1, borderColor: '#6EE7B7', marginTop: 14 },
+  precoSugeridoText:   { fontSize: 11, fontWeight: '700', color: '#065F46' },
+  inputSugerido:       { borderColor: '#34D399', backgroundColor: '#F0FDF4' },
+
+  hodoInfoCard:  { backgroundColor: '#EFF6FF', borderRadius: 14, borderWidth: 1.5, borderColor: '#BFDBFE', padding: 14, marginBottom: 18 },
+  hodoInfoRow:   { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
+  hodoInfoIcon:  { fontSize: 20, marginTop: 2 },
+  hodoInfoLabel: { fontSize: 12, fontWeight: '600', color: '#1E40AF', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 2 },
+  hodoInfoValue: { fontSize: 26, fontWeight: '800', color: '#1E3A8A', lineHeight: 32 },
+  hodoInfoSub:   { fontSize: 12, color: '#3B82F6', marginTop: 3, lineHeight: 16 },
 
   selectBox:         { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1.5, borderColor: COLORS.primary, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 14, backgroundColor: '#EEF2FF' },
   selectVal:         { fontSize: 15, fontWeight: '600', color: COLORS.primary, flex: 1 },

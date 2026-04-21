@@ -69,6 +69,10 @@ export const api = {
   validarPasso: (dados) =>
     request('POST', '/api/mobile/validar-passo', dados),
 
+  // Preço sugerido por posto + combustível
+  getPreco: (cnpjPosto, combustivel) =>
+    request('GET', `/api/mobile/preco-combustivel?cnpj=${encodeURIComponent(cnpjPosto)}&combustivel=${encodeURIComponent(combustivel)}`),
+
   // Abastecimento
   solicitarAbastecimento: (dados) =>
     request('POST', '/api/mobile/abastecimento/solicitar', dados),

@@ -4,9 +4,10 @@ export const APP_VERSION = '1.0.0';
 export const COMBUSTIVEIS = [
   'Gasolina Comum',
   'Gasolina Aditivada',
-  'Etanol',
-  'Diesel S10',
+  'Etanol Comum',
+  'Etanol Aditivado',
   'Diesel Comum',
+  'Diesel Aditivado',
   'GNV',
 ];
 
