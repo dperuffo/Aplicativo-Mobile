@@ -78,6 +78,56 @@ export default function FuelingScreen({ navigation }) {
     }
   }, [isDiesel]);
 
+  // Busca preços sugeridos assim que posto + combustível estão definidos
+  useEffect(() => {
+    if (!posto || !combustivel) return;
+
+    setPrecoUnit('');
+    setPrecoSugerido(null);
+    setArlaPreco('');
+    setArlaPrecoSugerido(null);
+
+    // 1. Tenta extrair preço diretamente do objeto posto (ex.: posto.precos[])
+    function aplicarDoObjeto() {
+      if (Array.isArray(posto.precos)) {
+        const found = posto.precos.find(p => p.combustivel === combustivel);
+        if (found?.preco) {
+          const f = String(found.preco).replace('.', ',');
+          setPrecoSugerido(f);
+          setPrecoUnit(f);
+        }
+        const arla = posto.precos.find(p => /arla/i.test(p.combustivel));
+        if (arla?.preco) {
+          const f = String(arla.preco).replace('.', ',');
+          setArlaPrecoSugerido(f);
+          setArlaPreco(f);
+        }
+        return !!(found?.preco);
+      }
+      return false;
+    }
+
+    const encontrouLocal = aplicarDoObjeto();
+
+    // 2. Chama endpoint dedicado (substitui dados locais se retornar algo)
+    setLoadingPreco(true);
+    api.getPreco(posto.cnpj || posto.id, combustivel)
+      .then(r => {
+        if (r.preco) {
+          const f = String(r.preco).replace('.', ',');
+          setPrecoSugerido(f);
+          setPrecoUnit(f);
+        }
+        if (r.arla_preco) {
+          const f = String(r.arla_preco).replace('.', ',');
+          setArlaPrecoSugerido(f);
+          setArlaPreco(f);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoadingPreco(false));
+  }, [posto?.cnpj, posto?.id, combustivel]);
+
   // Pesquisa postos
   const [busca, setBusca]           = useState('');
   const [buscaCnpj, setBuscaCnpj]   = useState('');
@@ -211,20 +261,6 @@ export default function FuelingScreen({ navigation }) {
       const lista = res.avisos || [];
       const temAvisoReal = lista.some(a => a.tipo === 'error' || a.tipo === 'warning');
 
-      // Aproveita preco_sugerido / arla_preco_sugerido retornados pelo validarPasso
-      if (step === 2) {
-        if (res.preco_sugerido) {
-          const precoFormatado = String(res.preco_sugerido).replace('.', ',');
-          setPrecoSugerido(precoFormatado);
-          setPrecoUnit(precoFormatado);
-        }
-        if (res.arla_preco_sugerido) {
-          const arlaFormatado = String(res.arla_preco_sugerido).replace('.', ',');
-          setArlaPrecoSugerido(arlaFormatado);
-          setArlaPreco(arlaFormatado);
-        }
-      }
-
       if (lista.length > 0 && temAvisoReal) {
         setAvisos(lista);
         setAvisosBloqueado(res.bloqueado);
@@ -232,25 +268,6 @@ export default function FuelingScreen({ navigation }) {
         setModalAvisos(true);
       } else {
         setStep(s => s + 1);
-        // Busca preço sugerido (combustível + Arla) em background ao avançar do passo combustível
-        if (step === 2 && posto?.cnpj && (!res.preco_sugerido || !res.arla_preco_sugerido)) {
-          setLoadingPreco(true);
-          api.getPreco(posto.cnpj, combustivel)
-            .then(r => {
-              if (r.preco && !res.preco_sugerido) {
-                const precoFormatado = String(r.preco).replace('.', ',');
-                setPrecoSugerido(precoFormatado);
-                setPrecoUnit(precoFormatado);
-              }
-              if (r.arla_preco && !res.arla_preco_sugerido) {
-                const arlaFormatado = String(r.arla_preco).replace('.', ',');
-                setArlaPrecoSugerido(arlaFormatado);
-                setArlaPreco(arlaFormatado);
-              }
-            })
-            .catch(() => {})
-            .finally(() => setLoadingPreco(false));
-        }
       }
     } catch (e) {
       // Se validação falhar, deixa prosseguir (não bloqueia por erro de rede)
@@ -399,7 +416,7 @@ export default function FuelingScreen({ navigation }) {
                           <View style={styles.postoLista}>
                             <Text style={styles.postoListaHeader}>{postosFiltrados.length} posto{postosFiltrados.length !== 1 ? 's' : ''} encontrado{postosFiltrados.length !== 1 ? 's' : ''}</Text>
                             {postosFiltrados.map((p, i) => (
-                              <TouchableOpacity key={p.id || i} style={styles.postoItem} onPress={() => { setPosto(p); setPrecoUnit(''); setPrecoSugerido(null); setArlaPreco(''); setArlaPrecoSugerido(null); setError(''); }} activeOpacity={0.75}>
+                              <TouchableOpacity key={p.id || i} style={styles.postoItem} onPress={() => { setPosto(p); setError(''); }} activeOpacity={0.75}>
                                 <View style={styles.postoItemIcon}><Text style={styles.postoItemIconText}>⛽</Text></View>
                                 <View style={{ flex: 1 }}>
                                   <Text style={styles.postoItemNome}>{p.razao}</Text>
@@ -425,7 +442,7 @@ export default function FuelingScreen({ navigation }) {
               <View style={styles.combGrid}>
                 {COMBUSTIVEIS.map(c => (
                   <TouchableOpacity key={c} style={[styles.combItem, combustivel === c && styles.combItemSel]}
-                    onPress={() => { setCombustivel(c); setPrecoUnit(''); setPrecoSugerido(null); setArlaPreco(''); setArlaPrecoSugerido(null); setError(''); }}>
+                    onPress={() => { setCombustivel(c); setError(''); }}>
                     <Text style={styles.combEmoji}>{getCombEmoji(c)}</Text>
                     <Text style={[styles.combLabel, combustivel === c && styles.combLabelSel]}>{c}</Text>
                   </TouchableOpacity>
