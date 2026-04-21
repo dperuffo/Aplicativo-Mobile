@@ -55,15 +55,28 @@ export default function FuelingScreen({ navigation }) {
   const [precoUnit, setPrecoUnit]     = useState('');
 
   // Preço sugerido pelo backend (posto + combustível)
-  const [precoSugerido, setPrecoSugerido] = useState(null);
-  const [loadingPreco, setLoadingPreco]   = useState(false);
+  const [precoSugerido, setPrecoSugerido]         = useState(null);
+  const [loadingPreco, setLoadingPreco]           = useState(false);
 
-  // Arla 32 (opcional, somente Diesel)
-  const [arlaAtivo, setArlaAtivo]     = useState(false);
-  const [arlaVolume, setArlaVolume]   = useState('');
-  const [arlaPreco, setArlaPreco]     = useState('');
+  // Arla 32 (somente Diesel — abre automaticamente)
+  const [arlaAtivo, setArlaAtivo]         = useState(false);
+  const [arlaVolume, setArlaVolume]       = useState('');
+  const [arlaPreco, setArlaPreco]         = useState('');
+  const [arlaPrecoSugerido, setArlaPrecoSugerido] = useState(null);
 
-  const isDiesel = combustivel === 'Diesel Comum' || combustivel === 'Diesel Aditivado';
+  const isDiesel = combustivel === 'Diesel Comum' || combustivel === 'Diesel S10';
+
+  // Abre/fecha Arla 32 automaticamente conforme combustível
+  useEffect(() => {
+    if (isDiesel) {
+      setArlaAtivo(true);
+    } else {
+      setArlaAtivo(false);
+      setArlaVolume('');
+      setArlaPreco('');
+      setArlaPrecoSugerido(null);
+    }
+  }, [isDiesel]);
 
   // Pesquisa postos
   const [busca, setBusca]           = useState('');
@@ -198,11 +211,18 @@ export default function FuelingScreen({ navigation }) {
       const lista = res.avisos || [];
       const temAvisoReal = lista.some(a => a.tipo === 'error' || a.tipo === 'warning');
 
-      // Aproveita preco_sugerido retornado pelo validarPasso (passo combustível)
-      if (step === 2 && res.preco_sugerido) {
-        const precoFormatado = String(res.preco_sugerido).replace('.', ',');
-        setPrecoSugerido(precoFormatado);
-        setPrecoUnit(precoFormatado);
+      // Aproveita preco_sugerido / arla_preco_sugerido retornados pelo validarPasso
+      if (step === 2) {
+        if (res.preco_sugerido) {
+          const precoFormatado = String(res.preco_sugerido).replace('.', ',');
+          setPrecoSugerido(precoFormatado);
+          setPrecoUnit(precoFormatado);
+        }
+        if (res.arla_preco_sugerido) {
+          const arlaFormatado = String(res.arla_preco_sugerido).replace('.', ',');
+          setArlaPrecoSugerido(arlaFormatado);
+          setArlaPreco(arlaFormatado);
+        }
       }
 
       if (lista.length > 0 && temAvisoReal) {
@@ -212,15 +232,20 @@ export default function FuelingScreen({ navigation }) {
         setModalAvisos(true);
       } else {
         setStep(s => s + 1);
-        // Busca preço sugerido em background ao avançar do passo combustível
-        if (step === 2 && posto?.cnpj && !res.preco_sugerido) {
+        // Busca preço sugerido (combustível + Arla) em background ao avançar do passo combustível
+        if (step === 2 && posto?.cnpj && (!res.preco_sugerido || !res.arla_preco_sugerido)) {
           setLoadingPreco(true);
           api.getPreco(posto.cnpj, combustivel)
             .then(r => {
-              if (r.preco) {
+              if (r.preco && !res.preco_sugerido) {
                 const precoFormatado = String(r.preco).replace('.', ',');
                 setPrecoSugerido(precoFormatado);
                 setPrecoUnit(precoFormatado);
+              }
+              if (r.arla_preco && !res.arla_preco_sugerido) {
+                const arlaFormatado = String(r.arla_preco).replace('.', ',');
+                setArlaPrecoSugerido(arlaFormatado);
+                setArlaPreco(arlaFormatado);
               }
             })
             .catch(() => {})
@@ -374,7 +399,7 @@ export default function FuelingScreen({ navigation }) {
                           <View style={styles.postoLista}>
                             <Text style={styles.postoListaHeader}>{postosFiltrados.length} posto{postosFiltrados.length !== 1 ? 's' : ''} encontrado{postosFiltrados.length !== 1 ? 's' : ''}</Text>
                             {postosFiltrados.map((p, i) => (
-                              <TouchableOpacity key={p.id || i} style={styles.postoItem} onPress={() => { setPosto(p); setPrecoUnit(''); setPrecoSugerido(null); setError(''); }} activeOpacity={0.75}>
+                              <TouchableOpacity key={p.id || i} style={styles.postoItem} onPress={() => { setPosto(p); setPrecoUnit(''); setPrecoSugerido(null); setArlaPreco(''); setArlaPrecoSugerido(null); setError(''); }} activeOpacity={0.75}>
                                 <View style={styles.postoItemIcon}><Text style={styles.postoItemIconText}>⛽</Text></View>
                                 <View style={{ flex: 1 }}>
                                   <Text style={styles.postoItemNome}>{p.razao}</Text>
@@ -400,7 +425,7 @@ export default function FuelingScreen({ navigation }) {
               <View style={styles.combGrid}>
                 {COMBUSTIVEIS.map(c => (
                   <TouchableOpacity key={c} style={[styles.combItem, combustivel === c && styles.combItemSel]}
-                    onPress={() => { setCombustivel(c); setPrecoUnit(''); setPrecoSugerido(null); setError(''); }}>
+                    onPress={() => { setCombustivel(c); setPrecoUnit(''); setPrecoSugerido(null); setArlaPreco(''); setArlaPrecoSugerido(null); setError(''); }}>
                     <Text style={styles.combEmoji}>{getCombEmoji(c)}</Text>
                     <Text style={[styles.combLabel, combustivel === c && styles.combLabelSel]}>{c}</Text>
                   </TouchableOpacity>
@@ -468,18 +493,23 @@ export default function FuelingScreen({ navigation }) {
                 keyboardType="numeric"
               />
 
-              {/* ── Arla 32 (somente Diesel) ── */}
+              {/* ── Arla 32 (somente Diesel — abre automaticamente) ── */}
               {isDiesel && (
                 <View style={styles.arlaWrap}>
-                  <TouchableOpacity style={styles.arlaToggle} onPress={() => { setArlaAtivo(a => !a); setArlaVolume(''); setArlaPreco(''); }} activeOpacity={0.8}>
-                    <View style={[styles.arlaCheckbox, arlaAtivo && styles.arlaCheckboxOn]}>
+                  <View style={styles.arlaHeader}>
+                    <Text style={styles.arlaHeaderIcon}>🔵</Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.arlaToggleLabel}>Arla 32</Text>
+                      <Text style={styles.arlaToggleSub}>Aditivo para motores SCR — preencha volume e preço</Text>
+                    </View>
+                    <TouchableOpacity
+                      style={[styles.arlaCheckbox, arlaAtivo && styles.arlaCheckboxOn]}
+                      onPress={() => { setArlaAtivo(a => !a); if (arlaAtivo) { setArlaVolume(''); setArlaPreco(''); setArlaPrecoSugerido(null); } }}
+                      activeOpacity={0.8}
+                    >
                       {arlaAtivo && <Text style={styles.arlaCheckMark}>✓</Text>}
-                    </View>
-                    <View>
-                      <Text style={styles.arlaToggleLabel}>Adicionar Arla 32</Text>
-                      <Text style={styles.arlaToggleSub}>Aditivo obrigatório para motores SCR</Text>
-                    </View>
-                  </TouchableOpacity>
+                    </TouchableOpacity>
+                  </View>
 
                   {arlaAtivo && (
                     <View style={styles.arlaFields}>
@@ -490,10 +520,23 @@ export default function FuelingScreen({ navigation }) {
                           placeholder="Ex: 5" placeholderTextColor={COLORS.textMuted} keyboardType="numeric" />
                       </View>
                       <View style={{ flex: 1 }}>
-                        <Text style={styles.label}>Preço / litro (R$)</Text>
-                        <TextInput style={styles.inputLarge} value={arlaPreco}
+                        <View style={styles.arlaPrecoLabelRow}>
+                          <Text style={styles.label}>Preço / litro (R$)</Text>
+                          {loadingPreco && <ActivityIndicator size="small" color={COLORS.primary} />}
+                          {!loadingPreco && arlaPrecoSugerido && arlaPreco === arlaPrecoSugerido && (
+                            <View style={styles.precoSugeridoBadge}>
+                              <Text style={styles.precoSugeridoText}>⚡ Sugerido</Text>
+                            </View>
+                          )}
+                        </View>
+                        <TextInput
+                          style={[styles.inputLarge, arlaPrecoSugerido && arlaPreco === arlaPrecoSugerido && styles.inputSugerido]}
+                          value={arlaPreco}
                           onChangeText={v => { setArlaPreco(v.replace(/[^0-9,.]/g, '')); setError(''); }}
-                          placeholder="Ex: 4,50" placeholderTextColor={COLORS.textMuted} keyboardType="numeric" />
+                          placeholder={loadingPreco ? 'Buscando...' : 'Ex: 4,50'}
+                          placeholderTextColor={COLORS.textMuted}
+                          keyboardType="numeric"
+                        />
                       </View>
                     </View>
                   )}
@@ -736,13 +779,16 @@ const styles = StyleSheet.create({
   previewValue: { fontSize: 28, fontWeight: '800', color: '#16A34A' },
 
   arlaWrap:          { marginTop: 20, borderTopWidth: 1, borderTopColor: COLORS.border, paddingTop: 16 },
+  arlaHeader:        { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 4 },
   arlaToggle:        { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 4 },
   arlaCheckbox:      { width: 24, height: 24, borderRadius: 6, borderWidth: 2, borderColor: COLORS.border, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.bg },
   arlaCheckboxOn:    { borderColor: '#0F2D6B', backgroundColor: '#0F2D6B' },
   arlaCheckMark:     { color: '#fff', fontSize: 13, fontWeight: '700' },
+  arlaHeaderIcon:    { fontSize: 22 },
   arlaToggleLabel:   { fontSize: 15, fontWeight: '700', color: COLORS.textPrimary },
   arlaToggleSub:     { fontSize: 12, color: COLORS.textMuted, marginTop: 1 },
   arlaFields:        { flexDirection: 'row', gap: 12, marginTop: 14 },
+  arlaPrecoLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 },
 
   errorBox:  { backgroundColor: '#FEF2F2', borderRadius: 10, padding: 12, marginBottom: 12 },
   errorText: { color: COLORS.danger, fontSize: 14, fontWeight: '500' },

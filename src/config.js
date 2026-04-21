@@ -7,7 +7,7 @@ export const COMBUSTIVEIS = [
   'Etanol Comum',
   'Etanol Aditivado',
   'Diesel Comum',
-  'Diesel Aditivado',
+  'Diesel S10',
   'GNV',
 ];
 
