@@ -10,9 +10,9 @@ import { COLORS, COMBUSTIVEIS } from '../config';
 import { formatPlaca, formatNumero } from '../utils/formatters';
 import { api } from '../api';
 
-const STEPS = ['Veículo', 'Posto', 'Combustível', 'Hodômetro', 'Volume'];
+const STEPS  = ['Veículo', 'Posto', 'Combustível', 'Hodômetro', 'Volume', 'Serviços'];
 
-const ETAPAS = ['veiculo', 'posto', 'combustivel', 'hodometro', 'volume'];
+const ETAPAS = ['veiculo', 'posto', 'combustivel', 'hodometro', 'volume', 'servicos'];
 
 function AvisoItem({ aviso }) {
   const map = {
@@ -77,6 +77,31 @@ export default function FuelingScreen({ navigation }) {
       setArlaPrecoSugerido(null);
     }
   }, [isDiesel]);
+
+  // Serviços
+  const [servicosDisponiveis, setServicosDisponiveis] = useState([]);
+  const [servicosSel, setServicosSel]                 = useState([]); // [{nome, valor:''}]
+  const [loadingServicos, setLoadingServicos]          = useState(false);
+
+  useEffect(() => {
+    if (step !== 5 || !posto?.cnpj) return;
+    setLoadingServicos(true);
+    api.getServicos(posto.cnpj, placa)
+      .then(s => setServicosDisponiveis(s || []))
+      .catch(() => setServicosDisponiveis([]))
+      .finally(() => setLoadingServicos(false));
+  }, [step]);
+
+  function toggleServico(nome) {
+    setServicosSel(prev => {
+      if (prev.find(s => s.nome === nome)) return prev.filter(s => s.nome !== nome);
+      return [...prev, { nome, valor: '' }];
+    });
+  }
+
+  function setServicoValor(nome, v) {
+    setServicosSel(prev => prev.map(s => s.nome === nome ? { ...s, valor: v } : s));
+  }
 
   // Busca preços sugeridos assim que posto + combustível estão definidos
   useEffect(() => {
@@ -182,6 +207,8 @@ export default function FuelingScreen({ navigation }) {
     const av = arlaAtivo ? (parseFloat(arlaVolume.replace(',', '.')) || 0) : 0;
     const ap = arlaAtivo ? (parseFloat(arlaPreco.replace(',', '.'))  || 0) : 0;
     const arlaTotal = parseFloat((av * ap).toFixed(2));
+    const svcsTotal = servicosSel.reduce(
+      (sum, s) => sum + (parseFloat((s.valor || '0').replace(',', '.')) || 0), 0);
     return {
       etapa:         ETAPAS[targetStep] || '',
       placa:         placa.trim().toUpperCase(),
@@ -194,7 +221,11 @@ export default function FuelingScreen({ navigation }) {
       arla32Volume:  av,
       arla32Preco:   ap,
       arla32Total:   arlaTotal,
-      valorTotal:    parseFloat((v * p + arlaTotal).toFixed(2)),
+      valorTotal:    parseFloat((v * p + arlaTotal + svcsTotal).toFixed(2)),
+      servicosAbast: servicosSel.map(s => ({
+        nome:  s.nome,
+        valor: parseFloat((s.valor || '0').replace(',', '.')) || 0,
+      })),
     };
   }
 
@@ -234,7 +265,13 @@ export default function FuelingScreen({ navigation }) {
       const p  = parseFloat(precoUnit.replace(',', '.'));
       const av = arlaAtivo ? (parseFloat(arlaVolume.replace(',', '.')) || 0) : 0;
       const ap = arlaAtivo ? (parseFloat(arlaPreco.replace(',', '.'))  || 0) : 0;
-      const arlaTotal = parseFloat((av * ap).toFixed(2));
+      const arlaTotal  = parseFloat((av * ap).toFixed(2));
+      const svcsTotal  = servicosSel.reduce(
+        (sum, s) => sum + (parseFloat((s.valor || '0').replace(',', '.')) || 0), 0);
+      const servicosAbast = servicosSel.map(s => ({
+        nome:  s.nome,
+        valor: parseFloat((s.valor || '0').replace(',', '.')) || 0,
+      }));
       navigation.navigate('Summary', {
         placa:         placa.trim().toUpperCase(),
         posto:         posto?.razao    || '',
@@ -249,7 +286,8 @@ export default function FuelingScreen({ navigation }) {
         arla32Volume:  av,
         arla32Preco:   ap,
         arla32Total:   arlaTotal,
-        valorTotal:    parseFloat((v * p + arlaTotal).toFixed(2)),
+        servicosAbast,
+        valorTotal:    parseFloat((v * p + arlaTotal + svcsTotal).toFixed(2)),
       });
       return;
     }
@@ -592,6 +630,79 @@ export default function FuelingScreen({ navigation }) {
             </View>
           )}
 
+          {/* ── Step 5: Serviços ── */}
+          {step === 5 && (
+            <View style={styles.stepCard}>
+              <Text style={styles.stepTitle}>🛠️ Serviços</Text>
+              <Text style={styles.stepDesc}>Selecione os serviços utilizados neste posto (opcional).</Text>
+
+              {loadingServicos ? (
+                <ActivityIndicator color={COLORS.primary} style={{ marginVertical: 24 }} />
+              ) : servicosDisponiveis.length === 0 ? (
+                <View style={styles.svcEmpty}>
+                  <Text style={styles.svcEmptyIcon}>🏪</Text>
+                  <Text style={styles.svcEmptyText}>Nenhum serviço cadastrado para este posto.</Text>
+                </View>
+              ) : (
+                servicosDisponiveis.map(svc => {
+                  const sel     = servicosSel.find(s => s.nome === svc.nome);
+                  const isSel   = !!sel;
+                  const bloq    = !svc.permitido;
+                  return (
+                    <View key={svc.nome} style={[styles.svcItem, bloq && styles.svcItemBloq, isSel && styles.svcItemSel]}>
+                      <TouchableOpacity
+                        style={styles.svcRow}
+                        onPress={() => !bloq && toggleServico(svc.nome)}
+                        activeOpacity={bloq ? 1 : 0.7}
+                        disabled={bloq}
+                      >
+                        <View style={[styles.svcCheckbox, isSel && styles.svcCheckboxOn, bloq && styles.svcCheckboxBloq]}>
+                          {isSel && <Text style={styles.svcCheck}>✓</Text>}
+                          {bloq  && <Text style={styles.svcBloqMark}>✕</Text>}
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={[styles.svcNome, bloq && styles.svcNomeBloq]}>
+                            {getSvcEmoji(svc.nome)}  {svc.nome}
+                          </Text>
+                          {bloq && (
+                            <Text style={styles.svcBloqMotivo}>{svc.motivo_bloqueio || 'Não autorizado'}</Text>
+                          )}
+                          {!bloq && svc.valor_max != null && (
+                            <Text style={styles.svcCap}>Limite: R$ {svc.valor_max.toFixed(2).replace('.', ',')}</Text>
+                          )}
+                        </View>
+                        {bloq && <Text style={{ fontSize: 16 }}>🚫</Text>}
+                      </TouchableOpacity>
+
+                      {isSel && (
+                        <View style={styles.svcValorRow}>
+                          <Text style={styles.svcValorLabel}>Valor cobrado (R$)</Text>
+                          <TextInput
+                            style={[styles.inputLarge, styles.svcValorInput]}
+                            value={sel.valor}
+                            onChangeText={v => setServicoValor(svc.nome, v.replace(/[^0-9,.]/g, ''))}
+                            placeholder="0,00"
+                            placeholderTextColor={COLORS.textMuted}
+                            keyboardType="numeric"
+                          />
+                        </View>
+                      )}
+                    </View>
+                  );
+                })
+              )}
+
+              {servicosSel.length > 0 && (
+                <View style={styles.svcTotalBox}>
+                  <Text style={styles.svcTotalLabel}>Total serviços</Text>
+                  <Text style={styles.svcTotalValue}>
+                    R$ {servicosSel.reduce((s, x) => s + (parseFloat((x.valor||'0').replace(',','.')) || 0), 0).toFixed(2).replace('.',',')}
+                  </Text>
+                </View>
+              )}
+            </View>
+          )}
+
           {error ? (
             <View style={styles.errorBox}><Text style={styles.errorText}>⚠ {error}</Text></View>
           ) : null}
@@ -700,6 +811,19 @@ export default function FuelingScreen({ navigation }) {
   );
 }
 
+function getSvcEmoji(nome) {
+  const n = (nome || '').toLowerCase();
+  if (n.includes('lavagem'))       return '🚿';
+  if (n.includes('lubrifica'))     return '🔧';
+  if (n.includes('restaurante'))   return '🍽️';
+  if (n.includes('banheiro'))      return '🚻';
+  if (n.includes('hotel') || n.includes('pousada')) return '🛏️';
+  if (n.includes('estaciona'))     return '🅿️';
+  if (n.includes('seguran'))       return '🛡️';
+  if (n.includes('internet') || n.includes('wi-fi') || n.includes('wifi')) return '📶';
+  return '🛠️';
+}
+
 function getCombEmoji(c) {
   if (c.includes('Gasolina')) return '🟡';
   if (c.includes('Etanol'))   return '🟢';
@@ -806,6 +930,36 @@ const styles = StyleSheet.create({
   arlaToggleSub:     { fontSize: 12, color: COLORS.textMuted, marginTop: 1 },
   arlaFields:        { flexDirection: 'row', gap: 12, marginTop: 14 },
   arlaPrecoLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 },
+
+  // Serviços
+  svcEmpty:        { alignItems: 'center', paddingVertical: 28 },
+  svcEmptyIcon:    { fontSize: 32, marginBottom: 8 },
+  svcEmptyText:    { fontSize: 14, color: COLORS.textMuted, textAlign: 'center' },
+
+  svcItem:         { borderRadius: 14, borderWidth: 1.5, borderColor: COLORS.border, marginBottom: 10, overflow: 'hidden', backgroundColor: COLORS.card },
+  svcItemSel:      { borderColor: COLORS.primary, backgroundColor: '#EEF2FF' },
+  svcItemBloq:     { borderColor: '#FECACA', backgroundColor: '#FEF2F2', opacity: 0.75 },
+
+  svcRow:          { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14 },
+
+  svcCheckbox:     { width: 24, height: 24, borderRadius: 6, borderWidth: 2, borderColor: COLORS.border, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.bg },
+  svcCheckboxOn:   { borderColor: COLORS.primary, backgroundColor: COLORS.primary },
+  svcCheckboxBloq: { borderColor: '#FECACA', backgroundColor: '#FEF2F2' },
+  svcCheck:        { color: '#fff', fontSize: 13, fontWeight: '700' },
+  svcBloqMark:     { color: '#DC2626', fontSize: 11, fontWeight: '700' },
+
+  svcNome:         { fontSize: 15, fontWeight: '700', color: COLORS.textPrimary },
+  svcNomeBloq:     { color: '#DC2626' },
+  svcBloqMotivo:   { fontSize: 12, color: '#DC2626', marginTop: 2 },
+  svcCap:          { fontSize: 12, color: COLORS.primary, marginTop: 2, fontWeight: '600' },
+
+  svcValorRow:     { paddingHorizontal: 14, paddingBottom: 14 },
+  svcValorLabel:   { fontSize: 12, fontWeight: '600', color: COLORS.textSecondary, marginBottom: 6 },
+  svcValorInput:   { fontSize: 22, paddingVertical: 12 },
+
+  svcTotalBox:     { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 8, backgroundColor: '#EEF2FF', borderRadius: 12, padding: 14 },
+  svcTotalLabel:   { fontSize: 13, fontWeight: '600', color: COLORS.primary },
+  svcTotalValue:   { fontSize: 20, fontWeight: '800', color: COLORS.primary },
 
   errorBox:  { backgroundColor: '#FEF2F2', borderRadius: 10, padding: 12, marginBottom: 12 },
   errorText: { color: COLORS.danger, fontSize: 14, fontWeight: '500' },

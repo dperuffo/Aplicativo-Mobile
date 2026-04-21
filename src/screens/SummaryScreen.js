@@ -13,6 +13,7 @@ export default function SummaryScreen({ route, navigation }) {
   const { placa, posto, cnpjPosto, cidadePosto, ufPosto, bandeiraPosto,
           combustivel, hodometro, volume, precoUnitario,
           arla32Volume = 0, arla32Preco = 0, arla32Total = 0,
+          servicosAbast = [],
           valorTotal } = route.params;
   const [loading, setLoading] = useState(false);
 
@@ -32,6 +33,7 @@ export default function SummaryScreen({ route, navigation }) {
         arla32Volume,
         arla32Preco,
         arla32Total,
+        servicosAbast,
         valorTotal,
       });
       navigation.replace('AuthCode', {
@@ -63,9 +65,16 @@ export default function SummaryScreen({ route, navigation }) {
     { label: 'Volume',             value: `${formatNumero(volume, 2)} L`,                 icon: '🧪' },
     { label: 'Preço por litro',    value: formatMoeda(precoUnitario),                     icon: '💲' },
     ...(arla32Total > 0 ? [
-      { label: 'Arla 32',          value: `${formatNumero(arla32Volume, 2)} L × ${formatMoeda(arla32Preco)}/L = ${formatMoeda(arla32Total)}`, icon: '🔵' },
+      { label: 'Arla 32', value: `${formatNumero(arla32Volume, 2)} L × ${formatMoeda(arla32Preco)}/L = ${formatMoeda(arla32Total)}`, icon: '🔵' },
     ] : []),
+    ...servicosAbast.map(s => ({
+      label: `Serviço · ${s.nome}`,
+      value: formatMoeda(s.valor),
+      icon:  '🛠️',
+    })),
   ];
+
+  const svcsTotal = servicosAbast.reduce((sum, s) => sum + (s.valor || 0), 0);
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -107,6 +116,7 @@ export default function SummaryScreen({ route, navigation }) {
           <Text style={styles.totalNote}>
             {formatNumero(volume, 2)} L × {formatMoeda(precoUnitario)}/L
             {arla32Total > 0 ? `  +  Arla ${formatMoeda(arla32Total)}` : ''}
+            {svcsTotal > 0 ? `  +  Serviços ${formatMoeda(svcsTotal)}` : ''}
           </Text>
         </LinearGradient>
 

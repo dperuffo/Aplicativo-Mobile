@@ -73,6 +73,10 @@ export const api = {
   getPreco: (cnpjPosto, combustivel) =>
     request('GET', `/api/mobile/preco-combustivel?cnpj=${encodeURIComponent(cnpjPosto)}&combustivel=${encodeURIComponent(combustivel)}`),
 
+  // Serviços disponíveis no posto + permissões do motorista
+  getServicos: (cnpjPosto, placa) =>
+    request('GET', `/api/mobile/servicos?cnpj=${encodeURIComponent(cnpjPosto)}&placa=${encodeURIComponent(placa || '')}`),
+
   // Abastecimento
   solicitarAbastecimento: (dados) =>
     request('POST', '/api/mobile/abastecimento/solicitar', dados),
